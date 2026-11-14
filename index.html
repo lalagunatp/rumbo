@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rumbo · Consultor de marketing</title>
+<meta name="description" content="Cuéntanos sobre tu negocio y recibe un plan de marketing y ventas a tu medida.">
+<meta property="og:title" content="Rumbo · Consultor de marketing">
+<meta property="og:description" content="Cuéntanos sobre tu negocio y recibe un plan de marketing y ventas a tu medida.">
+<meta property="og:type" content="website">
+<style>
+  html, body { margin: 0; height: 100%; background: #faf7f2; }
+  iframe { display: block; border: 0; width: 100%; height: 100vh; height: 100dvh; }
+</style>
+</head>
+<body>
+<iframe id="app" title="Rumbo"></iframe>
+<script>
+  // URL de la aplicación web de Apps Script (Implementar > Administrar implementaciones).
+  const APP = "https://script.google.com/macros/s/AKfycbxwEbZDHmooWizNXvw6UKElOBUkCk4tGrIp51IB9hKe7bncFP7zr1PqNfZm2Y8tq2M/exec";
+  // Sin parámetros abre el modo cliente; ?modo=completo abre la app completa.
+  const q = new URLSearchParams(location.search);
+  if (!q.has("modo")) q.set("modo", "cliente");
+  document.getElementById("app").src = APP + "?" + q.toString();
+</script>
+</body>
+</html>
