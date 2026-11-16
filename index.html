@@ -702,7 +702,9 @@ function seccionCompetencia(){
   box.append(el("div",{class:"grid2"},
     el("div",{class:"panel sect"}, el("h3",{text:"Huecos que nadie atiende"}), el("ul",{class:"clean"}, arr(c.huecos).map(x=>el("li",{text:str(x)})))),
     el("div",{class:"panel sect"}, el("h3",{text:"Cómo diferenciarte"}), el("ul",{class:"clean"}, arr(c.recomendaciones).map(x=>el("li",{text:str(x)}))))));
-  box.append(el("p",{class:"note",text:`Investigado en internet el ${new Date(c._generado).toLocaleDateString("es-MX")}${c.zona ? " · Zona: "+str(c.zona) : ""}. Verifica nombres y precios antes de citarlos: los sitios cambian.`}));
+  const b = c._busqueda;
+  box.append(el("p",{class:"note",text:`Investigado en internet el ${new Date(c._generado).toLocaleDateString("es-MX")}${b?.paginas ? ` (${b.busquedas} búsquedas, ${b.paginas} páginas consultadas)` : ""}${c.zona ? " · Zona: "+str(c.zona) : ""}. Verifica nombres y precios antes de citarlos: los sitios cambian.`}));
+  if (arr(b?.errores).length) box.append(el("div",{class:"banner"}, "El buscador no completó todas las búsquedas, así que el análisis puede estar incompleto. ", el("b",{text:"Pulsa «Actualizar investigación»"}), " para repetirlo."));
   return box;
 }
 
