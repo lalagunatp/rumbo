@@ -128,6 +128,7 @@ th{font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mu
 tr:last-child td{border-bottom:0}
 .sect{display:flex;flex-direction:column;gap:12px}
 .note{font-size:.82rem;color:var(--muted)}
+details>summary{cursor:pointer;color:var(--primary);font-weight:600}
 .ad{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg);display:flex;flex-direction:column;gap:6px}
 .ad .t{font-weight:700}
 .ad .cta{align-self:flex-start;font-size:.8rem;font-weight:600;background:var(--primary);color:var(--primary-ink);padding:3px 10px;border-radius:6px}
@@ -867,8 +868,10 @@ function pedirPersonas(){
 /* 4. Campañas */
 let campSeg = "";
 function vCampanas(v){
-  v.append(head("Etapa 4","Campañas digitales","Define el público, la plataforma y el presupuesto. El consultor arma la estructura, los anuncios y las metas."));
+  v.append(head("Etapa 4","Campañas digitales","Primero el consultor te propone 3 campañas. Elige una (o define la tuya) y él arma la estructura, los anuncios y las metas."));
   if (necesitaPerfil(v)) return;
+  if (!actual.ejemplo) v.append(seccionPropuestas());
+  v.append(el("h3",{id:"campForm",text: arr(actual.perfil.propuestas?.propuestas).length ? "O define tu propia campaña" : "Define tu campaña"}));
   const segs = arr(actual.personas).map(p=>str(p.nombre));
   const dl = el("datalist",{id:"segList"}, segs.map(s=>el("option",{value:s})));
   const seg = el("input",{type:"text",id:"c_seg",list:"segList",placeholder:"Ej. Mariana, 32 años / dueños de restaurantes"}); seg.value = campSeg;
@@ -885,7 +888,7 @@ function vCampanas(v){
     el("div",{class:"field"}, el("label",{for:"c_dur",text:"Duración"}), dur),
     el("div",{class:"field"}, el("label",{for:"c_oferta",text:"Oferta o gancho (opcional)"}), oferta)
   ), el("div",{class:"actions",style:"margin-top:16px"},
-    el("button",{class:"btn primary",type:"button","data-ai":true,onclick:()=>pedirCampana({seg:seg.value||"Público general del negocio",plat:plat.value,obj:obj.value,pres:Number(pres.value)||0,dur:dur.value,oferta:oferta.value})},"Crear campaña"))));
+    el("button",{class:"btn primary",type:"button","data-ai":true,onclick:()=>{ const idea = campIdea; campIdea = ""; pedirCampana({seg:seg.value||"Público general del negocio",plat:plat.value,obj:obj.value,pres:Number(pres.value)||0,dur:dur.value,oferta:oferta.value,idea}); }},"Crear campaña"))));
   const host = el("div",{id:"campHost",class:"sect"}); v.append(host);
   const list = el("div",{class:"sect"}); v.append(list);
   if (!actual.campanas?.length){ host.append(el("div",{class:"empty"}, el("p",{text:"Aún no hay campañas. Llena el formulario y pulsa «Crear campaña»."}))); return; }
@@ -918,6 +921,56 @@ function campCard(c){
     arr(c.cumplimiento).length ? el("div",{class:"banner small"}, el("b",{text:"Revisa antes de publicar: "}), el("ul",{class:"clean"}, arr(c.cumplimiento).map(x=>el("li",{text:str(x)})))) : null,
     c.siguiente_paso && el("p",{class:"small"}, el("b",{text:"Siguiente paso: "}), str(c.siguiente_paso))
   );
+}
+/* Propuestas de campaña: 3 opciones apoyadas en búsquedas en internet, antes de que el cliente elija. Viven en perfil.propuestas. */
+function pedirPropuestas(){
+  const host = $("#propHost"); if(!host) return;
+  generar({ tipo:"propuestas", host, label:"Buscando en internet y preparando 3 propuestas de campaña",
+    onDone: r => { actual.perfil.propuestas = r; save(); render(); toast("Propuestas listas."); } });
+}
+const opcionesDe = pr => ({ seg:str(pr.publico)||"Público general del negocio", plat:str(pr.plataforma), obj:str(pr.objetivo), pres:Number(pr.presupuesto)||0, dur:String(pr.duracion||30), oferta:str(pr.oferta),
+  idea:`${str(pr.nombre)}: ${str(pr.enfoque)} ${str(pr.por_que)}` });
+/** Copia la propuesta al formulario para ajustarla antes de diseñar la campaña. */
+function ajustarPropuesta(pr){
+  const o = opcionesDe(pr), pon = (id, val) => { const e = $("#"+id); if (!e) return;
+    if (e.tagName === "SELECT" && val && ![...e.options].some(x=>x.value===val)) e.append(el("option",{value:val},val));
+    e.value = val; };
+  pon("c_seg", o.seg); pon("c_plat", o.plat); pon("c_obj", o.obj); pon("c_pres", o.pres); pon("c_dur", o.dur); pon("c_oferta", o.oferta);
+  campIdea = o.idea;
+  $("#campForm")?.scrollIntoView({behavior:"smooth"}); toast("Propuesta copiada al formulario. Ajústala y pulsa «Crear campaña».");
+}
+let campIdea = "";
+function seccionPropuestas(){
+  const r = actual.perfil.propuestas, ps = arr(r?.propuestas), mon = actual.perfil.moneda;
+  const box = el("div",{id:"propHost",class:"sect"});
+  box.append(el("div",{class:"head"},
+    el("div",null, el("h3",{text:"Propuestas del consultor"}),
+      el("p",{class:"small muted",text:"Tres caminos distintos para este negocio, apoyados en lo que el consultor encuentra en internet: costos de referencia, qué anuncia la competencia y qué les funciona a negocios similares."})),
+    el("button",{class:"btn"+(ps.length?"":" primary"),type:"button","data-ai":true,onclick:pedirPropuestas}, ps.length ? "Nuevas propuestas" : "Proponer 3 campañas")));
+  if (!ps.length){ box.append(el("div",{class:"empty"}, el("p",{text:"Aún no hay propuestas para este negocio."}), el("p",{class:"small",text:"Tarda alrededor de un minuto. Si ya investigaste la competencia, las propuestas la toman en cuenta."}))); return box; }
+  const rec = Number(r.recomendada);
+  box.append(el("div",{class:"cards"}, ps.map((pr,i)=>el("div",{class:"card"},
+    el("div",{class:"actions"}, el("span",{class:"pill",text:`Opción ${i+1}`}), i===rec && el("span",{class:"pill p1",text:"Recomendada"})),
+    el("h3",{text:str(pr.nombre)}),
+    el("p",{class:"small",text:str(pr.enfoque)}),
+    el("p",{class:"small muted"}, `${str(pr.plataforma)} · ${str(pr.objetivo)} · ${money(Number(pr.presupuesto),mon)} en ${str(pr.duracion)} días`),
+    el("p",{class:"small"}, el("b",{text:"Para quién: "}), str(pr.publico)),
+    el("p",{class:"small"}, el("b",{text:"Qué esperar: "}), str(pr.resultado_esperado)),
+    el("details",{class:"small"}, el("summary",{text:"Ver detalle"}),
+      el("div",{class:"sect",style:"margin-top:8px"},
+        el("p",null, el("b",{text:"Gancho: "}), str(pr.oferta)),
+        el("p",null, el("b",{text:"Por qué: "}), str(pr.por_que)),
+        pr.costo_referencia && el("p",null, el("b",{text:"Costo de referencia: "}), str(pr.costo_referencia)),
+        arr(pr.ventajas).length && el("ul",{class:"clean"}, arr(pr.ventajas).map(x=>el("li",{text:"✓ "+str(x)}))),
+        arr(pr.riesgos).length && el("ul",{class:"clean muted"}, arr(pr.riesgos).map(x=>el("li",{text:"⚠ "+str(x)}))),
+        /^https?:/.test(str(pr.fuente)) && el("a",{href:str(pr.fuente),target:"_blank",rel:"noopener"},"Ver fuente"))),
+    el("div",{class:"actions",style:"margin-top:auto"},
+      el("button",{class:"btn primary",type:"button","data-ai":true,onclick:()=>{ pedirCampana(opcionesDe(pr)); $("#campHost")?.scrollIntoView({behavior:"smooth"}); }},"Diseñar esta campaña"),
+      el("button",{class:"btn ghost",type:"button",onclick:()=>ajustarPropuesta(pr)},"Ajustar antes"))))));
+  if (r.razon) box.append(el("div",{class:"banner"}, el("b",{text:"Por dónde empezar: "}), str(r.razon)));
+  const b = r._busqueda;
+  box.append(el("p",{class:"note",text:`Propuestas del ${new Date(r._generado).toLocaleDateString("es-MX")}${b?.paginas ? ` (${b.busquedas} búsquedas, ${b.paginas} páginas consultadas)` : ""}. Los resultados esperados son estimaciones, no promesas.`}));
+  return box;
 }
 function pedirCampana(o){
   generar({ tipo:"campana", opciones:o, host: $("#campHost"), label:"Diseñando la campaña",
