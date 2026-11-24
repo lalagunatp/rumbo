@@ -266,10 +266,16 @@ function run(fn, ...args){
   });
 }
 /* En GitHub Pages se llama a doPost de Code.gs sin cookies: así no falla con varias cuentas de Google abiertas. */
+/* Apps Script corta cualquier ejecución a los 6 min y responde con una página de Google sin CORS:
+   el navegador solo ve un error de red. Pasado ese tiempo se cancela y se avisa que tardó demasiado. */
+const LIMITE_API_MS = 380000;
+const MSG_LENTO = "El consultor tardó demasiado en responder. Intenta de nuevo en un momento.";
 async function llamarApi(fn, args){
+  const t0 = Date.now(), ctrl = new AbortController(), corte = setTimeout(() => ctrl.abort(), LIMITE_API_MS);
   let r;
-  try{ r = await fetch(API_URL, {method:"POST", body: JSON.stringify({fn, args}), credentials:"omit", redirect:"follow"}); }
-  catch{ throw new Error("Sin conexión con el servidor. Revisa tu internet e intenta de nuevo."); }
+  try{ r = await fetch(API_URL, {method:"POST", body: JSON.stringify({fn, args}), credentials:"omit", redirect:"follow", signal: ctrl.signal}); }
+  catch{ throw new Error(Date.now() - t0 > 300000 ? MSG_LENTO : "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo."); }
+  finally{ clearTimeout(corte); }
   let res = null;
   try{ if (r.ok) res = await r.json(); }catch{}
   if (!res) throw new Error("El servidor no respondió. Intenta de nuevo.");
