@@ -266,21 +266,55 @@ function run(fn, ...args){
   });
 }
 /* En GitHub Pages se llama a doPost de Code.gs sin cookies: así no falla con varias cuentas de Google abiertas. */
-/* Apps Script corta cualquier ejecución a los 6 min y responde con una página de Google sin CORS:
-   el navegador solo ve un error de red. Pasado ese tiempo se cancela y se avisa que tardó demasiado. */
-const LIMITE_API_MS = 380000;
+/* En algunas redes la conexión que espera la respuesta se cae en silencio si el servidor tarda (~20 s o más):
+   el servidor termina bien, pero la respuesta nunca llega. Por eso cada llamada lleva un id, doPost guarda
+   el resultado unos minutos y, si la respuesta directa no llega, la app lo pide con llamadas cortas.
+   Apps Script corta cualquier ejecución a los 6 min: pasado ese tiempo se deja de esperar. */
+const LIMITE_API_MS = 380000, PRIMER_SONDEO_MS = 25000, CADA_SONDEO_MS = 5000, FALLOS_RED_MAX = 3;
 const MSG_LENTO = "El consultor tardó demasiado en responder. Intenta de nuevo en un momento.";
-async function llamarApi(fn, args){
-  const t0 = Date.now(), ctrl = new AbortController(), corte = setTimeout(() => ctrl.abort(), LIMITE_API_MS);
-  let r;
-  try{ r = await fetch(API_URL, {method:"POST", body: JSON.stringify({fn, args}), credentials:"omit", redirect:"follow", signal: ctrl.signal}); }
-  catch{ throw new Error(Date.now() - t0 > 300000 ? MSG_LENTO : "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo."); }
-  finally{ clearTimeout(corte); }
-  let res = null;
-  try{ if (r.ok) res = await r.json(); }catch{}
-  if (!res) throw new Error("El servidor no respondió. Intenta de nuevo.");
+const MSG_RED = "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+/* Un POST a doPost. Devuelve {ok, data|error}, o null si la respuesta no se pudo leer. Lanza si no hubo conexión. */
+async function postApi(body, signal){
+  const r = await fetch(API_URL, {method:"POST", body: JSON.stringify(body), credentials:"omit", redirect:"follow", signal});
+  try{ return r.ok ? await r.json() : null; }catch{ return null; }
+}
+function datosDe(res){
   if (!res.ok) throw new Error(str(res.error) || "Algo salió mal. Intenta de nuevo.");
   return res.data;
+}
+function llamarApi(fn, args){
+  const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9-]/g, "");
+  const ctrl = new AbortController();
+  return new Promise((resolve, reject) => {
+    let fin = false, sondeo = null, sondeando = false, fallosRed = 0;
+    const terminar = (err, data) => {
+      if (fin) return;
+      fin = true; clearTimeout(corte); clearTimeout(sondeo); ctrl.abort();
+      err ? reject(err) : resolve(data);
+    };
+    const corte = setTimeout(() => terminar(new Error(MSG_LENTO)), LIMITE_API_MS);
+    const sondear = async () => {
+      if (fin) return;
+      sondeando = true;
+      let res;
+      try{ res = await postApi({fn:"leerResultado", args:[id]}, ctrl.signal); fallosRed = 0; }
+      catch{ if (++fallosRed >= FALLOS_RED_MAX) return terminar(new Error(MSG_RED)); }
+      if (fin) return;
+      // res.data es el resultado guardado ({ok, data|error}); null mientras el servidor sigue trabajando.
+      if (res?.ok && res.data){ try{ terminar(null, datosDe(res.data)); }catch(e){ terminar(e); } return; }
+      sondeo = setTimeout(sondear, CADA_SONDEO_MS);
+    };
+    sondeo = setTimeout(sondear, PRIMER_SONDEO_MS);
+    postApi({fn, args, id}, ctrl.signal)
+      .then(res => {
+        if (res){ try{ terminar(null, datosDe(res)); }catch(e){ terminar(e); } return; }
+        throw new Error("sin respuesta legible");
+      })
+      .catch(() => {
+        // La respuesta directa se perdió: el resultado se recoge con el sondeo, que empieza ya si no había empezado.
+        if (!fin && !sondeando){ clearTimeout(sondeo); sondear(); }
+      });
+  });
 }
 const msgErr = e => str(e?.message || e).replace(/^Exception:\s*/,"").replace(/^Error:\s*/,"") || "Algo salió mal. Intenta de nuevo.";
 
