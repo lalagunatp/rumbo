@@ -910,7 +910,7 @@ let campSeg = "";
 function vCampanas(v){
   v.append(head("Etapa 4","Campañas digitales","Primero el consultor te propone 3 campañas. Elige una (o define la tuya) y él arma la estructura, los anuncios y las metas."));
   if (necesitaPerfil(v)) return;
-  if (!actual.ejemplo) v.append(seccionPropuestas());
+  if (!actual.ejemplo){ const d = seccionDistancias(); if (d) v.append(d); v.append(seccionPropuestas()); }
   v.append(el("h3",{id:"campForm",text: arr(actual.perfil.propuestas?.propuestas).length ? "O define tu propia campaña" : "Define tu campaña"}));
   const segs = arr(actual.personas).map(p=>str(p.nombre));
   const dl = el("datalist",{id:"segList"}, segs.map(s=>el("option",{value:s})));
@@ -1010,6 +1010,46 @@ function seccionPropuestas(){
   if (r.razon) box.append(el("div",{class:"banner"}, el("b",{text:"Por dónde empezar: "}), str(r.razon)));
   const b = r._busqueda;
   box.append(el("p",{class:"note",text:`Propuestas del ${new Date(r._generado).toLocaleDateString("es-MX")}${b?.paginas ? ` (${b.busquedas} búsquedas, ${b.paginas} páginas consultadas)` : ""}. Los resultados esperados son estimaciones, no promesas.`}));
+  return box;
+}
+/* Distancias a lugares de referencia (Google Maps, en Code.gs): solo para negocios con dirección. Viven en perfil.distancias
+   y el consultor las usa en propuestas, campañas y chat ("a 10 min del estadio"). */
+const ORIGEN_DISTANCIAS = {local:"direccion", inmobiliaria:"inmuebles", domicilio:"base"};
+function seccionDistancias(){
+  const p = actual.perfil, campo = ORIGEN_DISTANCIAS[p.tipo_negocio];
+  if (!campo) return null;
+  const r = p.distancias, filas = arr(r?.filas);
+  const box = el("div",{id:"distHost",class:"sect"});
+  box.append(el("div",null, el("h3",{text:"Distancias a lugares de referencia"}),
+    el("p",{class:"small muted",text:`Escribe los lugares que le importan a tu cliente (zona industrial, estadio, universidad, hospital, centro comercial…). Google Maps calcula los kilómetros y minutos en auto desde ${p.tipo_negocio==="inmobiliaria" ? "cada inmueble" : p.tipo_negocio==="domicilio" ? "tu base" : "tu negocio"}, y el consultor los usa en las propuestas y los anuncios.`})));
+  if (!str(p.extra?.[campo]).trim()){
+    box.append(el("div",{class:"empty"}, el("p",{text:`Primero escribe en el perfil ${TIPOS[p.tipo_negocio].campos.find(c=>c[0]===campo)?.[1].toLowerCase() || "la dirección"}.`})));
+    return box;
+  }
+  const t = el("textarea",{id:"d_lugares", placeholder:"Uno por línea, hasta 8. Ej.\nParque Industrial Santa Rosa\nEstadio BBVA\nTec de Monterrey campus Monterrey"});
+  t.value = arr(r?.lugares).join("\n");
+  const btn = el("button",{class:"btn"+(filas.length?"":" primary"),type:"button"}, filas.length ? "Volver a calcular" : "Calcular distancias");
+  btn.addEventListener("click", async ()=>{
+    const lugares = t.value.split("\n").map(s=>s.trim()).filter(Boolean).slice(0,8);
+    if (!lugares.length) return toast("Escribe al menos un lugar.");
+    btn.disabled = true; btn.textContent = "Calculando…";
+    try{
+      p.distancias = await run("calcularDistancias", {id: actual.id, perfil: JSON.parse(JSON.stringify(p))}, lugares);
+      save(); render(); toast("Distancias listas. El consultor las usará en tus campañas.");
+    }catch(e){ btn.disabled = false; btn.textContent = "Calcular distancias"; toast(msgErr(e)); }
+  });
+  box.append(el("div",{class:"panel"}, el("div",{class:"field"}, el("label",{for:"d_lugares",text:"Lugares de referencia"}), t),
+    el("div",{class:"actions",style:"margin-top:12px"}, btn,
+      filas.length ? el("button",{class:"btn ghost",type:"button",onclick:()=>{ delete p.distancias; save(); render(); }},"Quitar distancias") : null)));
+  if (filas.length){
+    const varios = filas.some(f=>f.desde !== filas[0].desde);
+    box.append(el("div",{class:"tbl"}, el("table",null,
+      el("thead",null, el("tr",null, [varios && "Desde","Lugar","Distancia","Tiempo en auto","Google lo ubicó en"].filter(Boolean).map(x=>el("th",{text:x})))),
+      el("tbody",null, filas.map(f=>el("tr",null, varios && el("td",{text:str(f.desde)}), el("td",{text:str(f.lugar)}),
+        el("td",{text: f.km!=null ? `${num(Number(f.km),1)} km` : "Sin ruta"}), el("td",{text: f.minutos!=null ? `~${num(Number(f.minutos))} min` : "—"}),
+        el("td",{class:"small muted",text:str(f.destino) || "No se encontró: escríbelo más completo"})))))));
+    box.append(el("p",{class:"note",text:`Calculado el ${new Date(r._generado).toLocaleDateString("es-MX")} con Google Maps, sin tráfico. Revisa la última columna: si Google ubicó otro lugar, agrega la colonia o la ciudad y vuelve a calcular.`}));
+  }
   return box;
 }
 function pedirCampana(o){
